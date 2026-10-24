@@ -9,6 +9,10 @@ const countUpNote = document.querySelector('#countUpNote');
 const modeLabel = document.querySelector('#modeLabel');
 const soundEnabled = document.querySelector('#soundEnabled');
 const chimeInterval = document.querySelector('#chimeInterval');
+const paceSound = document.querySelector('#paceSound');
+const voicePicker = document.querySelector('#voicePicker');
+const voiceRate = document.querySelector('#voiceRate');
+const voiceCalls = document.querySelector('#voiceCalls');
 const soundDetails = document.querySelector('#soundDetails');
 const voiceEnabled = document.querySelector('#voiceEnabled');
 const voiceDetails = document.querySelector('#voiceDetails');
@@ -17,6 +21,9 @@ const beatPanel = document.querySelector('#beatPanel');
 const filePanel = document.querySelector('#filePanel');
 const bpmInput = document.querySelector('#bpmInput');
 const beatStyle = document.querySelector('#beatStyle');
+const beatMood = document.querySelector('#beatMood');
+const buildUp = document.querySelector('#buildUp');
+const shuffleMusic = document.querySelector('#shuffleMusic');
 const musicFile = document.querySelector('#musicFile');
 const musicFileName = document.querySelector('#musicFileName');
 const musicVolumeInput = document.querySelector('#musicVolume');
@@ -30,9 +37,9 @@ const musicRadios = document.querySelectorAll('input[name="music"]');
 const lockedWhileRunning = [...document.querySelectorAll('.duration-control button, .duration-control input'), ...modeRadios];
 
 const MAX_SECONDS = 240 * 60 + 59;
-const STORAGE_KEY = 'core-tempo-settings';
-const savedInputs = [durationInput, durationSecondsInput, soundEnabled, chimeInterval, voiceEnabled, bpmInput, beatStyle, musicVolumeInput];
-let initialSeconds = 120;
+const STORAGE_KEY = 'core-tempo-settings-v2';
+const savedInputs = [durationInput, durationSecondsInput, soundEnabled, paceSound, chimeInterval, voiceEnabled, voiceRate, voiceCalls, bpmInput, beatStyle, beatMood, buildUp, shuffleMusic, musicVolumeInput];
+let initialSeconds = 180;
 let elapsedMs = 0;
 let elapsedSeconds = 0;
 let startAt = 0;
@@ -66,7 +73,24 @@ function render() {
 
 let audioContext, musicVolume, duckGain, noiseBuffer, mediaSource;
 const musicAudio = new Audio();
-musicAudio.loop = true;
+// Own music: one or more picked files, played in order (or shuffled) and repeated.
+let playlist = [];
+let trackIndex = 0;
+function loadTrack(index) {
+  trackIndex = index;
+  musicAudio.src = playlist[index].url;
+  musicAudio.loop = playlist.length === 1;
+}
+function randomTrack() {
+  if (playlist.length < 2) return 0;
+  const next = Math.floor(Math.random() * (playlist.length - 1));
+  return next >= trackIndex ? next + 1 : next;
+}
+musicAudio.addEventListener('ended', () => {
+  if (playlist.length < 2) return;
+  loadTrack(shuffleMusic.checked ? randomTrack() : (trackIndex + 1) % playlist.length);
+  musicAudio.play().catch(() => {});
+});
 
 function ensureAudio() {
   if (!audioContext) {
@@ -86,23 +110,35 @@ function envelope(gain, when, peak, length, attack = .01) {
   gain.gain.exponentialRampToValueAtTime(peak, when + attack);
   gain.gain.exponentialRampToValueAtTime(.0001, when + length);
 }
-// A bell is a sine fundamental plus a few quieter, faster-fading overtones.
-function bell(frequency, when, peak = .14, length = 2.4) {
+// Each pace sound is a sine fundamental plus quieter, faster-fading overtones ([ratio, level]).
+// `pace` is the single note for the pace signal, `chord` is arpeggiated at the finish.
+const PACE_SOUNDS = {
+  bell: { partials: [[1, 1], [2, .28], [2.76, .12], [5.4, .04]], peak: .12, length: 1.8, attack: .012, pace: 659.25, chord: [523.25, 659.25, 783.99] },
+  bowl: { partials: [[1, 1], [1.006, .7], [2.71, .3], [5.15, .08]], peak: .1, length: 4.5, attack: .09, pace: 293.66, chord: [220, 293.66, 369.99] },
+  kalimba: { partials: [[1, 1], [3.02, .12], [6.1, .05]], peak: .14, length: 1.1, attack: .003, pace: 783.99, chord: [587.33, 783.99, 987.77] },
+  marimba: { partials: [[1, 1], [4, .2], [9.9, .04]], peak: .2, length: .7, attack: .004, pace: 523.25, chord: [392, 523.25, 659.25] },
+  chimes: { partials: [[1, 1], [2.32, .25], [4.25, .1], [6.63, .04]], peak: .07, length: 2.6, attack: .004, pace: 1174.66, chord: [1046.5, 1174.66, 1318.51, 1567.98] },
+  woodblock: { partials: [[1, 1], [2.48, .35]], peak: .22, length: .14, attack: .002, pace: 880, chord: [659.25, 880, 1046.5] },
+  tick: { partials: [[1, 1]], peak: .12, length: .06, attack: .002, pace: 1400, chord: [1050, 1400] },
+};
+function strike(sound, frequency, when, length = sound.length) {
   const ctx = ensureAudio();
-  [[1, 1], [2, .28], [2.76, .12], [5.4, .04]].forEach(([ratio, level]) => {
+  sound.partials.forEach(([ratio, level]) => {
     const oscillator = ctx.createOscillator();
     const gain = ctx.createGain();
     oscillator.frequency.value = frequency * ratio;
-    envelope(gain, when, peak * level, length / Math.sqrt(ratio));
+    envelope(gain, when, sound.peak * level, Math.max(.05, length / Math.sqrt(ratio)), sound.attack);
     oscillator.connect(gain).connect(ctx.destination);
-    oscillator.start(when); oscillator.stop(when + length);
+    oscillator.start(when); oscillator.stop(when + length + .05);
   });
 }
 function chime(final = false) {
   if (!soundEnabled.checked) return;
+  const sound = PACE_SOUNDS[paceSound.value] || PACE_SOUNDS.bell;
   const now = ensureAudio().currentTime + .02;
-  if (!final) { bell(659.25, now, .12, 1.8); return; }
-  bell(523.25, now); bell(659.25, now + .18); bell(783.99, now + .36, .14, 3.2);
+  if (!final) { strike(sound, sound.pace, now); return; }
+  // Short sounds get a longer ring at the finish so the chord still lands.
+  sound.chord.forEach((frequency, index) => strike(sound, frequency, now + index * .18, Math.max(sound.length * 1.4, .5)));
 }
 
 function tone(output, when, { type = 'sine', from, to = from, peak, length, attack = .005 }) {
@@ -125,27 +161,100 @@ function noise(output, when, { filter, frequency, peak, length }) {
   source.connect(biquad).connect(gain).connect(output);
   source.start(when); source.stop(when + length + .05);
 }
-// C – Am – F – G, one chord root per bar.
-const BASS_LINE = [65.41, 55, 43.65, 49];
-function playStep(output, step, when, barLength) {
-  const beatInBar = step % 8;
-  if (beatInBar === 0) {
-    const root = BASS_LINE[Math.floor(step / 8) % BASS_LINE.length];
-    tone(output, when, { type: 'triangle', from: root, peak: .16, length: barLength * .95, attack: .06 });
-    tone(output, when, { from: root * 2, peak: .05, length: barLength * .8, attack: .1 });
-  }
-  if (beatStyle.value === 'drums') {
-    if (beatInBar === 0 || beatInBar === 4) tone(output, when, { from: 150, to: 45, peak: .7, length: .4 });
-    if (beatInBar === 2 || beatInBar === 6) {
-      noise(output, when, { filter: 'bandpass', frequency: 1800, peak: .22, length: .18 });
-      tone(output, when, { type: 'triangle', from: 190, peak: .1, length: .1 });
+const midiToHz = note => 440 * 2 ** ((note - 69) / 12);
+// Four-bar chord loops as MIDI notes: [bass, ...chord tones].
+const MOODS = {
+  calm: [[36, 60, 64, 67], [33, 57, 60, 64], [29, 57, 60, 65], [31, 55, 59, 62]], // C – Am – F – G
+  uplifting: [[29, 57, 60, 65], [31, 55, 59, 62], [28, 55, 59, 64], [33, 57, 60, 64]], // F – G – Em – Am
+  dreamy: [[36, 60, 64, 67, 71], [29, 57, 60, 64, 65], [33, 55, 57, 60, 64], [29, 57, 60, 64, 65]], // Cmaj7 – Fmaj7 – Am7 – Fmaj7
+  melancholy: [[33, 57, 60, 64], [29, 57, 60, 65], [36, 55, 60, 64], [31, 55, 59, 62]], // Am – F – C – G
+  intense: [[33, 57, 60, 64], [38, 57, 62, 65], [28, 55, 59, 64], [33, 57, 60, 64]], // Am – Dm – Em – Am
+};
+
+// Steps are eighth notes, 8 per bar. Each style gets the bar's bass and chord tones in Hz.
+const bassBar = ({ output, when, barLength, bass }, peak = .16) => {
+  tone(output, when, { type: 'triangle', from: bass, peak, length: barLength * .95, attack: .06 });
+  tone(output, when, { from: bass * 2, peak: peak / 3, length: barLength * .8, attack: .1 });
+};
+const kick = (output, when, peak = .7) => tone(output, when, { from: 150, to: 45, peak, length: .4 });
+const snare = (output, when, peak = .22) => {
+  noise(output, when, { filter: 'bandpass', frequency: 1800, peak, length: .18 });
+  tone(output, when, { type: 'triangle', from: 190, peak: peak / 2, length: .1 });
+};
+const hat = (output, when, peak) => noise(output, when, { filter: 'highpass', frequency: 7000, peak, length: .04 });
+const shaker = (output, when, peak = .04) => noise(output, when, { filter: 'highpass', frequency: 5000, peak, length: .07 });
+const BEAT_STYLES = {
+  soft(beat) {
+    const { output, when, step } = beat;
+    if (step === 0) bassBar(beat);
+    if (step % 2 === 0) tone(output, when, { from: 120, to: 50, peak: step === 0 ? .5 : .32, length: .35 });
+    else shaker(output, when);
+  },
+  drums(beat) {
+    const { output, when, step } = beat;
+    if (step === 0) bassBar(beat);
+    if (step === 0 || step === 4) kick(output, when);
+    if (step === 2 || step === 6) snare(output, when);
+    hat(output, when, step % 2 ? .03 : .05);
+  },
+  lofi(beat) {
+    const { output, step, eighth, notes } = beat;
+    const when = beat.when + (step % 2 ? eighth * .2 : 0); // lazy swing on the offbeats
+    if (step === 0) {
+      bassBar(beat, .13);
+      notes.forEach(note => tone(output, when, { type: 'triangle', from: note, peak: .035, length: beat.barLength * .55, attack: .02 }));
     }
-    noise(output, when, { filter: 'highpass', frequency: 7000, peak: beatInBar % 2 ? .03 : .05, length: .04 });
-  } else if (beatInBar % 2 === 0) {
-    tone(output, when, { from: 120, to: 50, peak: beatInBar === 0 ? .5 : .32, length: .35 });
-  } else {
-    noise(output, when, { filter: 'highpass', frequency: 5000, peak: .04, length: .07 });
-  }
+    if (step === 0 || step === 5) kick(output, when, .5);
+    if (step === 2 || step === 6) snare(output, when, .13);
+    hat(output, when, step % 2 ? .02 : .03);
+  },
+  ambient(beat) {
+    const { output, when, step, notes, barLength } = beat;
+    if (step !== 0 && step !== 4) return;
+    if (step === 0) {
+      bassBar(beat, .13);
+      notes.forEach(note => tone(output, when, { from: note, peak: .065, length: barLength * 1.05, attack: .9 }));
+    }
+    tone(output, when, { from: 70, peak: .16, length: .6, attack: .03 });
+  },
+  heartbeat(beat) {
+    const { output, when, step, eighth, notes, barLength } = beat;
+    if (step === 0) notes.forEach(note => tone(output, when, { from: note / 2, peak: .03, length: barLength, attack: .6 }));
+    if (step % 2) return;
+    tone(output, when, { from: 65, to: 45, peak: .55, length: .18 });
+    tone(output, when + eighth * .45, { from: 58, to: 40, peak: .35, length: .16 });
+  },
+  toms(beat) {
+    const { output, when, step } = beat;
+    if (step === 0) bassBar(beat, .12);
+    if ([0, 3, 6].includes(step)) tone(output, when, { from: 110, to: 70, peak: .45, length: .35 });
+    if (step === 4) tone(output, when, { from: 170, to: 120, peak: .3, length: .25 });
+    if (step === 7) tone(output, when, { from: 240, to: 180, peak: .2, length: .18 });
+    if (step % 2) shaker(output, when, .035);
+  },
+  arp(beat) {
+    const { output, when, step, eighth, bass, notes } = beat;
+    if (step % 2 === 0) {
+      kick(output, when, .5);
+      tone(output, when, { type: 'triangle', from: bass * 2, peak: .1, length: eighth * 1.6 });
+    }
+    tone(output, when, { type: 'triangle', from: notes[step % notes.length] * 2, peak: .05, length: eighth * .9 });
+  },
+  metronome(beat) {
+    const { output, when, step } = beat;
+    if (step % 2 === 0) tone(output, when, { from: step === 0 ? 1600 : 1200, peak: step === 0 ? .3 : .22, length: .05, attack: .002 });
+  },
+};
+function playStep(output, step, when, eighth) {
+  const mood = MOODS[beatMood.value] || MOODS.calm;
+  const [bass, ...notes] = mood[Math.floor(step / 8) % mood.length].map(midiToHz);
+  (BEAT_STYLES[beatStyle.value] || BEAT_STYLES.soft)({ output, step: step % 8, when, eighth, barLength: eighth * 8, bass, notes });
+}
+// Build up raises the tempo by up to 20% as a count down nears its end.
+function currentBpm() {
+  const base = Number(bpmInput.value);
+  if (!buildUp.checked || !running || getMode() !== 'down') return base;
+  return base * (1 + .2 * elapsedSeconds / initialSeconds);
 }
 
 // Notes are scheduled ~1.2 s ahead so a throttled timer can't make the beat stutter.
@@ -156,9 +265,9 @@ function startBeat() {
   output.connect(musicVolume);
   beat = { output, step: 0, nextTime: ctx.currentTime + .08 };
   const schedule = () => {
-    const eighth = 60 / Number(bpmInput.value) / 2;
+    const eighth = 60 / currentBpm() / 2;
     while (beat.nextTime < ctx.currentTime + 1.2) {
-      playStep(beat.output, beat.step, beat.nextTime, eighth * 8);
+      playStep(beat.output, beat.step, beat.nextTime, eighth);
       beat.nextTime += eighth; beat.step += 1;
     }
   };
@@ -183,7 +292,7 @@ function startMusic() {
   musicVolume.gain.cancelScheduledValues(ctx.currentTime);
   musicVolume.gain.setValueAtTime(Number(musicVolumeInput.value) / 100, ctx.currentTime);
   if (source === 'beat') startBeat();
-  if (source === 'file' && musicAudio.src) {
+  if (source === 'file' && playlist.length) {
     mediaSource ||= ctx.createMediaElementSource(musicAudio);
     mediaSource.connect(musicVolume);
     musicAudio.play().catch(() => {});
@@ -193,7 +302,7 @@ function pauseMusic() { stopBeat(); musicAudio.pause(); }
 function stopMusic() {
   clearTimeout(fadeTimer);
   pauseMusic();
-  if (musicAudio.src) musicAudio.currentTime = 0;
+  if (playlist.length) loadTrack(shuffleMusic.checked ? randomTrack() : 0);
 }
 function fadeOutMusic() {
   if (!audioContext) return;
@@ -215,10 +324,21 @@ function setPreviewing(on) {
 /* ---------- Voice ---------- */
 
 const speechSupported = 'speechSynthesis' in window;
-let voice = null;
-function pickVoice() {
-  const voices = speechSynthesis.getVoices().filter(item => /^en/i.test(item.lang));
-  voice = voices.find(item => item.localService) || voices[0] || null;
+let preferredVoice = '';
+// Voices load asynchronously, so the picker is rebuilt whenever the list changes.
+function populateVoices() {
+  const wanted = voicePicker.value || preferredVoice;
+  const english = item => /^en/i.test(item.lang) ? 0 : 1;
+  const voices = speechSynthesis.getVoices().sort((a, b) => english(a) - english(b) || a.lang.localeCompare(b.lang) || a.name.localeCompare(b.name));
+  voicePicker.replaceChildren(new Option('Automatic', ''), ...voices.map(item => new Option(`${item.name} (${item.lang})`, item.voiceURI)));
+  if (voices.some(item => item.voiceURI === wanted)) voicePicker.value = wanted;
+}
+function currentVoice() {
+  const voices = speechSynthesis.getVoices();
+  const chosen = voices.find(item => item.voiceURI === voicePicker.value);
+  if (chosen) return chosen;
+  const english = voices.filter(item => /^en/i.test(item.lang));
+  return english.find(item => item.localService) || english[0] || null;
 }
 // The music ducks while the coach speaks so the words stay clear.
 function duck(on) {
@@ -228,8 +348,10 @@ function speak(text, interrupt = false) {
   if (!speechSupported || !voiceEnabled.checked) return false;
   if (interrupt) speechSynthesis.cancel();
   const utterance = new SpeechSynthesisUtterance(text);
+  const voice = currentVoice();
   if (voice) utterance.voice = voice;
   utterance.lang = voice?.lang || 'en-US';
+  utterance.rate = Number(voiceRate.value);
   utterance.onstart = () => duck(true);
   utterance.onend = utterance.onerror = () => duck(false);
   speechSynthesis.speak(utterance);
@@ -285,13 +407,31 @@ function finish() {
   chime(true); fadeOutMusic();
   speak('Done. Great hold!', true);
 }
-// Voice first; the pace bell only plays when the coach isn't talking.
+const ENCOURAGEMENT = ['Keep breathing.', 'Stay strong.', 'Squeeze your core.', 'Hips level.', 'Shoulders over elbows.', 'You got this.'];
+function spokenTime(total) {
+  const minutes = Math.floor(total / 60);
+  const seconds = total % 60;
+  return [minutes && `${minutes} minute${minutes === 1 ? '' : 's'}`, seconds && `${seconds} seconds`].filter(Boolean).join(' ');
+}
+// Returns [text, interrupt] for what the coach should say at this second, or null.
+function voiceCall(previous, current) {
+  const calls = voiceCalls.value;
+  const countDown = getMode() === 'down';
+  const remaining = initialSeconds - current;
+  if (countDown && calls !== 'minutes' && remaining <= 10) return [String(remaining), true];
+  const half = Math.floor(initialSeconds / 2);
+  if (countDown && calls === 'halfway' && previous < half && current >= half) return ['Halfway'];
+  if (calls === 'thirty') return crossed(previous, current, 30) ? [spokenTime(current - current % 30)] : null;
+  if (!crossed(previous, current, 60)) return null;
+  const text = spokenTime(current - current % 60);
+  return calls === 'coach' ? [`${text}. ${ENCOURAGEMENT[(Math.floor(current / 60) - 1) % ENCOURAGEMENT.length]}`] : [text];
+}
+// Voice first; the pace sound only plays when the coach isn't talking.
 function cue(previous, current) {
   const countDown = getMode() === 'down';
   const remaining = initialSeconds - current;
-  if (countDown && remaining <= 10 && speak(String(remaining), true)) return;
-  const minutes = Math.floor(current / 60);
-  if (crossed(previous, current, 60) && speak(`${minutes} minute${minutes === 1 ? '' : 's'}`)) return;
+  const call = voiceEnabled.checked && voiceCall(previous, current);
+  if (call && speak(...call)) return;
   const step = Number(chimeInterval.value);
   // Count down rings on the remaining time (e.g. 0:45, 0:30) so the bells line up with the finish.
   const ring = countDown ? crossed(initialSeconds - previous - 1, remaining - 1, step) : crossed(previous, current, step);
@@ -344,9 +484,7 @@ function updateModeUI() {
   modeLabel.textContent = countDown ? 'COUNT DOWN' : 'COUNT UP';
   durationBlock.hidden = !countDown;
   countUpNote.hidden = countDown;
-  document.querySelector('#voiceCopy').textContent = !speechSupported
-    ? "This browser doesn't support a voice coach."
-    : countDown ? 'Calls out each full minute, then counts down the last ten seconds.' : 'Calls out each full minute you hold.';
+  if (!speechSupported) document.querySelector('#voiceCopy').textContent = "This browser doesn't support a voice coach.";
 }
 function updateSoundUI() {
   soundDetails.classList.toggle('disabled', !soundEnabled.checked);
@@ -359,7 +497,7 @@ function updateSoundUI() {
   document.querySelector('#volumeValue').textContent = musicVolumeInput.value;
 }
 function saveSettings() {
-  const settings = { mode: getMode(), music: getMusicSource() };
+  const settings = { mode: getMode(), music: getMusicSource(), voice: voicePicker.value || preferredVoice };
   savedInputs.forEach(input => { settings[input.id] = input.type === 'checkbox' ? input.checked : input.value; });
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(settings)); } catch {}
 }
@@ -372,6 +510,7 @@ function loadSettings() {
   });
   modeRadios.forEach(radio => { if (radio.value === settings.mode) radio.checked = true; });
   musicRadios.forEach(radio => { if (radio.value === settings.music) radio.checked = true; });
+  preferredVoice = settings.voice || '';
 }
 
 document.querySelectorAll('[data-adjust]').forEach(button => button.addEventListener('click', () => {
@@ -394,12 +533,15 @@ musicVolumeInput.addEventListener('input', () => {
   if (audioContext) musicVolume.gain.setTargetAtTime(Number(musicVolumeInput.value) / 100, audioContext.currentTime, .05);
 });
 musicFile.addEventListener('change', () => {
-  const [file] = musicFile.files;
-  if (!file) return;
-  if (musicAudio.src) URL.revokeObjectURL(musicAudio.src);
-  musicAudio.src = URL.createObjectURL(file);
-  musicFileName.textContent = file.name;
-  restartMusicIfPlaying();
+  const files = [...musicFile.files];
+  if (!files.length) return;
+  const wasPlaying = running || previewing;
+  pauseMusic();
+  playlist.forEach(track => URL.revokeObjectURL(track.url));
+  playlist = files.map(file => ({ name: file.name, url: URL.createObjectURL(file) }));
+  loadTrack(shuffleMusic.checked ? randomTrack() : 0);
+  musicFileName.textContent = files.length === 1 ? files[0].name : `${files.length} songs: ${files.map(file => file.name).join(', ')}`;
+  if (wasPlaying) startMusic();
 });
 previewButton.addEventListener('click', () => {
   if (previewing) { setPreviewing(false); stopMusic(); return; }
@@ -409,10 +551,14 @@ previewButton.addEventListener('click', () => {
 document.addEventListener('change', saveSettings);
 startButton.addEventListener('click', startTimer); resetButton.addEventListener('click', resetTimer);
 document.querySelector('#testSound').addEventListener('click', () => chime());
-document.querySelector('#testVoice').addEventListener('click', () => speak('One minute. Keep holding.', true));
-if (speechSupported) { pickVoice(); speechSynthesis.addEventListener('voiceschanged', pickVoice); }
+const sampleVoice = () => speak('One minute. Keep holding.', true);
+document.querySelector('#testVoice').addEventListener('click', sampleVoice);
+paceSound.addEventListener('change', () => chime());
+voicePicker.addEventListener('change', () => { preferredVoice = voicePicker.value; sampleVoice(); });
+voiceRate.addEventListener('change', sampleVoice);
 
 loadSettings();
+if (speechSupported) { populateVoices(); speechSynthesis.addEventListener('voiceschanged', populateVoices); }
 updateModeUI();
 updateSoundUI();
 resetTimer();

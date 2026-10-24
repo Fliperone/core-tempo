@@ -47,7 +47,7 @@
           <label for="durationMinutes">Minutes</label>
           <div class="stepper" aria-label="Plank minutes">
             <button class="step" type="button" data-adjust="-1" aria-label="Decrease minutes">−</button>
-            <input id="durationMinutes" type="number" min="0" max="240" value="2" inputmode="numeric" />
+            <input id="durationMinutes" type="number" min="0" max="240" value="3" inputmode="numeric" />
             <button class="step" type="button" data-adjust="1" aria-label="Increase minutes">+</button>
           </div>
           <label for="durationSeconds" class="seconds-label">Seconds</label>
@@ -70,25 +70,39 @@
         <div class="setting-heading">
           <div>
             <p class="section-number">02</p>
-            <h2>Soft bell</h2>
+            <h2>Pace sound</h2>
           </div>
           <label class="toggle-label" for="soundEnabled">Enabled <input id="soundEnabled" type="checkbox" checked /><span class="toggle" aria-hidden="true"></span></label>
         </div>
         <div class="sound-details" id="soundDetails">
           <div>
-            <p class="cue-title">PACE BELL</p>
-            <p class="cue-copy">A gentle bell marks your pace, and a warm chord tells you you're done.</p>
+            <p class="cue-title">PACE SIGNAL</p>
+            <p class="cue-copy">A gentle sound marks your pace, and a warm chord of the same sound tells you you're done.</p>
           </div>
-          <label class="interval-label" for="chimeInterval">Every
-            <select id="chimeInterval" aria-label="Bell interval">
-              <option value="10">10 seconds</option>
-              <option value="15" selected>15 seconds</option>
-              <option value="20">20 seconds</option>
-              <option value="30">30 seconds</option>
-              <option value="60">60 seconds</option>
-            </select>
-          </label>
-          <button type="button" class="test-sound" id="testSound">TEST BELL ↗</button>
+          <div class="cue-options">
+            <label class="interval-label" for="paceSound">Sound
+              <select id="paceSound">
+                <option value="bell" selected>Soft bell</option>
+                <option value="bowl">Singing bowl</option>
+                <option value="kalimba">Kalimba</option>
+                <option value="marimba">Marimba</option>
+                <option value="chimes">Wind chimes</option>
+                <option value="woodblock">Wood block</option>
+                <option value="tick">Soft tick</option>
+              </select>
+            </label>
+            <label class="interval-label" for="chimeInterval">Every
+              <select id="chimeInterval">
+                <option value="10">10 seconds</option>
+                <option value="15">15 seconds</option>
+                <option value="20">20 seconds</option>
+                <option value="30" selected>30 seconds</option>
+                <option value="45">45 seconds</option>
+                <option value="60">60 seconds</option>
+              </select>
+            </label>
+          </div>
+          <button type="button" class="test-sound" id="testSound">TEST SOUND ↗</button>
         </div>
       </section>
 
@@ -102,8 +116,29 @@
         </div>
         <div class="sound-details" id="voiceDetails">
           <div>
-            <p class="cue-title">MINUTE CALLS</p>
-            <p class="cue-copy" id="voiceCopy">Calls out each full minute, then counts down the last ten seconds.</p>
+            <p class="cue-title">TIME CALLS</p>
+            <p class="cue-copy" id="voiceCopy">Pick a voice from your device, how fast it talks and what it calls out.</p>
+          </div>
+          <div class="cue-options">
+            <label class="interval-label" for="voicePicker">Voice
+              <select id="voicePicker"><option value="">Automatic</option></select>
+            </label>
+            <label class="interval-label" for="voiceRate">Speed
+              <select id="voiceRate">
+                <option value="0.85">Calm</option>
+                <option value="1" selected>Normal</option>
+                <option value="1.15">Brisk</option>
+              </select>
+            </label>
+            <label class="interval-label" for="voiceCalls">Calls
+              <select id="voiceCalls">
+                <option value="minutes-last10" selected>Minutes + last 10 s</option>
+                <option value="minutes">Minutes only</option>
+                <option value="halfway">Minutes, halfway + last 10 s</option>
+                <option value="thirty">Every 30 s + last 10 s</option>
+                <option value="coach">Minutes + encouragement + last 10 s</option>
+              </select>
+            </label>
           </div>
           <button type="button" class="test-sound" id="testVoice">TEST VOICE ↗</button>
         </div>
@@ -126,17 +161,36 @@
           <div class="music-panel" id="beatPanel">
             <label class="range-label" for="bpmInput">Tempo <output id="bpmValue">72</output> BPM</label>
             <input id="bpmInput" type="range" min="50" max="120" step="2" value="72" />
-            <label class="interval-label" for="beatStyle">Style
-              <select id="beatStyle">
-                <option value="soft" selected>Soft pulse</option>
-                <option value="drums">Steady drums</option>
-              </select>
-            </label>
+            <div class="cue-options">
+              <label class="interval-label" for="beatStyle">Style
+                <select id="beatStyle">
+                  <option value="soft" selected>Soft pulse</option>
+                  <option value="drums">Steady drums</option>
+                  <option value="lofi">Lo-fi groove</option>
+                  <option value="ambient">Ambient pads</option>
+                  <option value="heartbeat">Heartbeat</option>
+                  <option value="toms">Tribal toms</option>
+                  <option value="arp">Synth arpeggio</option>
+                  <option value="metronome">Metronome</option>
+                </select>
+              </label>
+              <label class="interval-label" for="beatMood">Mood
+                <select id="beatMood">
+                  <option value="calm" selected>Calm</option>
+                  <option value="uplifting">Uplifting</option>
+                  <option value="dreamy">Dreamy</option>
+                  <option value="melancholy">Melancholy</option>
+                  <option value="intense">Intense</option>
+                </select>
+              </label>
+            </div>
+            <label class="check-label" for="buildUp"><input id="buildUp" type="checkbox" /> Build up: tempo rises 20% toward the end of a count down</label>
           </div>
           <div class="music-panel" id="filePanel" hidden>
             <label class="file-button" for="musicFile">CHOOSE MUSIC</label>
-            <input id="musicFile" type="file" accept="audio/*" class="visually-hidden" />
-            <p class="cue-copy" id="musicFileName">No file chosen. It plays from your phone and stays on your phone.</p>
+            <input id="musicFile" type="file" accept="audio/*" multiple class="visually-hidden" />
+            <label class="check-label" for="shuffleMusic"><input id="shuffleMusic" type="checkbox" /> Shuffle</label>
+            <p class="cue-copy" id="musicFileName">No files chosen. Pick one song or several for a playlist. They play from your phone and stay on your phone.</p>
           </div>
           <div class="music-panel" id="volumePanel">
             <label class="range-label" for="musicVolume">Volume <output id="volumeValue">60</output>%</label>
