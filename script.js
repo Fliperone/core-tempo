@@ -162,14 +162,39 @@ function noise(output, when, { filter, frequency, peak, length }) {
   source.start(when); source.stop(when + length + .05);
 }
 const midiToHz = note => 440 * 2 ** ((note - 69) / 12);
-// Four-bar chord loops as MIDI notes: [bass, ...chord tones].
+// Each mood is a four-bar chord loop as MIDI notes ([bass, ...chord tones]) plus a signature
+// melodic layer, so the mood is audible in every style, not only in the bass line.
 const MOODS = {
-  calm: [[36, 60, 64, 67], [33, 57, 60, 64], [29, 57, 60, 65], [31, 55, 59, 62]], // C – Am – F – G
-  uplifting: [[29, 57, 60, 65], [31, 55, 59, 62], [28, 55, 59, 64], [33, 57, 60, 64]], // F – G – Em – Am
-  dreamy: [[36, 60, 64, 67, 71], [29, 57, 60, 64, 65], [33, 55, 57, 60, 64], [29, 57, 60, 64, 65]], // Cmaj7 – Fmaj7 – Am7 – Fmaj7
-  melancholy: [[33, 57, 60, 64], [29, 57, 60, 65], [36, 55, 60, 64], [31, 55, 59, 62]], // Am – F – C – G
-  intense: [[33, 57, 60, 64], [38, 57, 62, 65], [28, 55, 59, 64], [33, 57, 60, 64]], // Am – Dm – Em – Am
+  calm: { // C – Am – F – G, a slow bell on beat 3
+    chords: [[36, 60, 64, 67], [33, 57, 60, 64], [29, 57, 60, 65], [31, 55, 59, 62]],
+    layer: ({ output, when, step, notes }) => { if (step === 4) tone(output, when, { from: notes.at(-1) * 2, peak: .035, length: 1.2 }); },
+  },
+  uplifting: { // D – A – Bm – G, bright rising quarter notes
+    chords: [[38, 62, 66, 69], [33, 61, 64, 69], [35, 62, 66, 71], [31, 62, 67, 71]],
+    layer: ({ output, when, step, notes, eighth }) => {
+      if (step % 2 === 0) tone(output, when, { type: 'triangle', from: notes[step / 2 % notes.length] * 2, peak: .03, length: eighth * 1.5 });
+    },
+  },
+  dreamy: { // Cmaj7 – Fmaj7 – Am7 – Fmaj7, soft shimmering offbeats
+    chords: [[36, 60, 64, 67, 71], [29, 57, 60, 64, 65], [33, 55, 57, 60, 64], [29, 57, 60, 64, 65]],
+    layer: ({ output, when, step, notes }) => {
+      if (step % 2) tone(output, when, { from: notes[step * 3 % notes.length] * 2, peak: .02, length: 1.6, attack: .05 });
+    },
+  },
+  melancholy: { // Dm – B♭ – F – C, a falling three-note sigh
+    chords: [[38, 62, 65, 69], [34, 62, 65, 70], [29, 60, 65, 69], [36, 60, 64, 67]],
+    layer: ({ output, when, step, notes, eighth }) => {
+      const motif = { 0: notes[2], 3: notes[1], 6: notes[0] }[step];
+      if (motif) tone(output, when, { type: 'triangle', from: motif * 2, peak: .035, length: eighth * 3, attack: .03 });
+    },
+  },
+  intense: { // Am – F – G – E, a driving eighth-note bass
+    chords: [[33, 57, 60, 64], [29, 57, 60, 65], [31, 55, 59, 62], [28, 56, 59, 64]],
+    layer: ({ output, when, step, bass, eighth }) => tone(output, when, { type: 'triangle', from: bass * 2, peak: step % 2 ? .06 : .09, length: eighth * .7 }),
+  },
 };
+// Styles that don't voice the chords themselves get a quiet pad so the harmony is heard.
+const PAD_STYLES = new Set(['soft', 'drums', 'toms']);
 
 // Steps are eighth notes, 8 per bar. Each style gets the bar's bass and chord tones in Hz.
 const bassBar = ({ output, when, barLength, bass }, peak = .16) => {
@@ -246,9 +271,14 @@ const BEAT_STYLES = {
   },
 };
 function playStep(output, step, when, eighth) {
+  const style = beatStyle.value in BEAT_STYLES ? beatStyle.value : 'soft';
   const mood = MOODS[beatMood.value] || MOODS.calm;
-  const [bass, ...notes] = mood[Math.floor(step / 8) % mood.length].map(midiToHz);
-  (BEAT_STYLES[beatStyle.value] || BEAT_STYLES.soft)({ output, step: step % 8, when, eighth, barLength: eighth * 8, bass, notes });
+  const [bass, ...notes] = mood.chords[Math.floor(step / 8) % mood.chords.length].map(midiToHz);
+  const beat = { output, step: step % 8, when, eighth, barLength: eighth * 8, bass, notes };
+  BEAT_STYLES[style](beat);
+  if (style === 'metronome') return; // a bare click, by design
+  if (PAD_STYLES.has(style) && beat.step === 0) notes.forEach(note => tone(output, when, { from: note, peak: .03, length: beat.barLength, attack: .3 }));
+  mood.layer(beat);
 }
 // Build up raises the tempo by up to 20% as a count down nears its end.
 function currentBpm() {
@@ -493,6 +523,7 @@ function updateSoundUI() {
   musicDetails.hidden = source === 'off';
   beatPanel.hidden = source !== 'beat';
   filePanel.hidden = source !== 'file';
+  beatMood.disabled = beatStyle.value === 'metronome';
   document.querySelector('#bpmValue').textContent = bpmInput.value;
   document.querySelector('#volumeValue').textContent = musicVolumeInput.value;
 }
@@ -528,6 +559,7 @@ modeRadios.forEach(radio => radio.addEventListener('change', () => { updateModeU
 musicRadios.forEach(radio => radio.addEventListener('change', () => { updateSoundUI(); restartMusicIfPlaying(); }));
 [soundEnabled, voiceEnabled].forEach(input => input.addEventListener('change', updateSoundUI));
 bpmInput.addEventListener('input', updateSoundUI);
+beatStyle.addEventListener('change', updateSoundUI);
 musicVolumeInput.addEventListener('input', () => {
   updateSoundUI();
   if (audioContext) musicVolume.gain.setTargetAtTime(Number(musicVolumeInput.value) / 100, audioContext.currentTime, .05);
