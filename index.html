@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#f5f2e9" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#0e1a17" media="(prefers-color-scheme: dark)" />
-    <title>Route Tempo</title>
+    <title>Core Tempo</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap" rel="stylesheet" />
@@ -14,81 +14,139 @@
   <body>
     <main class="app-shell">
       <header>
-        <p class="eyebrow"><span></span> ROUTE TEMPO</p>
-        <h1>Your pace,<br /><em>on time.</em></h1>
-        <p class="intro">A calm countdown for the loop that gets you moving.</p>
+        <p class="eyebrow"><span></span> CORE TEMPO</p>
+        <h1>Hold strong,<br /><em>on tempo.</em></h1>
+        <p class="intro">A calm plank timer with a voice coach, a soft bell and a beat to hold to.</p>
       </header>
 
-      <section class="timer-card" aria-label="Exercise route timer">
-        <div class="route-label"><span class="route-dot"></span> HOME LOOP <span class="route-line"></span> <span id="statusText" aria-live="polite">READY</span></div>
-        <div class="time-display" role="timer" aria-label="Time remaining">
+      <section class="timer-card" aria-label="Plank timer">
+        <div class="route-label"><span class="route-dot"></span> <span id="modeLabel">COUNT DOWN</span> <span class="route-line"></span> <span id="statusText" aria-live="polite">READY</span></div>
+        <div class="time-display" role="timer" aria-label="Plank time">
           <span id="minutes">01</span><b>:</b><span id="seconds">00</span>
         </div>
         <div class="progress-track" aria-hidden="true"><div class="progress-fill" id="progressFill"></div></div>
         <div class="timer-actions">
-          <button class="primary-action" id="startButton" type="button"><span class="play-icon">▶</span> START ROUTE</button>
+          <button class="primary-action" id="startButton" type="button"><span class="play-icon">▶</span> START PLANK</button>
           <button class="reset-action" id="resetButton" type="button" aria-label="Reset timer">↺</button>
         </div>
       </section>
 
-      <section class="settings" aria-label="Timer settings">
+      <section class="settings" aria-label="Timer mode">
         <div class="setting-heading">
           <div>
             <p class="section-number">01</p>
-            <h2>Route length</h2>
+            <h2>Timer mode</h2>
           </div>
-          <p>Set the duration for today’s route.</p>
+          <p>Count down to a target, or count up and hold as long as you can.</p>
         </div>
-        <div class="duration-control">
+        <div class="segmented" role="radiogroup" aria-label="Timer mode">
+          <label><input type="radio" name="mode" value="down" checked /><span>Count down</span></label>
+          <label><input type="radio" name="mode" value="up" /><span>Count up</span></label>
+        </div>
+        <div class="duration-control" id="durationBlock">
           <label for="durationMinutes">Minutes</label>
-          <div class="stepper" aria-label="Route minutes">
-            <button class="step" type="button" data-adjust="-1" aria-label="Decrease route length">−</button>
-            <input id="durationMinutes" type="number" min="0" max="240" value="30" inputmode="numeric" />
-            <button class="step" type="button" data-adjust="1" aria-label="Increase route length">+</button>
+          <div class="stepper" aria-label="Plank minutes">
+            <button class="step" type="button" data-adjust="-1" aria-label="Decrease minutes">−</button>
+            <input id="durationMinutes" type="number" min="0" max="240" value="2" inputmode="numeric" />
+            <button class="step" type="button" data-adjust="1" aria-label="Increase minutes">+</button>
           </div>
           <label for="durationSeconds" class="seconds-label">Seconds</label>
-          <div class="stepper" aria-label="Route seconds">
-            <button class="step" type="button" data-second-adjust="-5" aria-label="Decrease route seconds">−</button>
+          <div class="stepper" aria-label="Plank seconds">
+            <button class="step" type="button" data-second-adjust="-5" aria-label="Decrease seconds">−</button>
             <input id="durationSeconds" type="number" min="0" max="59" value="00" inputmode="numeric" />
-            <button class="step" type="button" data-second-adjust="5" aria-label="Increase route seconds">+</button>
+            <button class="step" type="button" data-second-adjust="5" aria-label="Increase seconds">+</button>
           </div>
           <div class="quick-times" aria-label="Quick duration choices">
-            <button type="button" data-duration="20">20</button>
-            <button type="button" data-duration="30">30</button>
-            <button type="button" data-duration="45">45</button>
-            <button type="button" data-duration="60">60</button>
+            <button type="button" data-duration="1">1</button>
+            <button type="button" data-duration="2">2</button>
+            <button type="button" data-duration="3">3</button>
+            <button type="button" data-duration="5">5</button>
           </div>
         </div>
+        <p class="mode-note" id="countUpNote" hidden>Counts up until you stop. The voice calls out every full minute.</p>
       </section>
 
-      <section class="settings signal-settings" aria-label="Sound cue settings">
+      <section class="settings" aria-label="Bell settings">
         <div class="setting-heading">
           <div>
             <p class="section-number">02</p>
-            <h2>Sound cues</h2>
+            <h2>Soft bell</h2>
           </div>
           <label class="toggle-label" for="soundEnabled">Enabled <input id="soundEnabled" type="checkbox" checked /><span class="toggle" aria-hidden="true"></span></label>
         </div>
         <div class="sound-details" id="soundDetails">
           <div>
-            <p class="cue-title">PACE SIGNAL</p>
-            <p class="cue-copy">A short beep keeps your rhythm steady.</p>
+            <p class="cue-title">PACE BELL</p>
+            <p class="cue-copy">A gentle bell marks your pace, and a warm chord tells you you're done.</p>
           </div>
-          <label class="interval-label" for="beepInterval">Every
-            <select id="beepInterval" aria-label="Beep interval">
-              <option value="5">5 seconds</option>
-              <option value="10" selected>10 seconds</option>
-              <option value="15">15 seconds</option>
+          <label class="interval-label" for="chimeInterval">Every
+            <select id="chimeInterval" aria-label="Bell interval">
+              <option value="10">10 seconds</option>
+              <option value="15" selected>15 seconds</option>
               <option value="20">20 seconds</option>
               <option value="30">30 seconds</option>
               <option value="60">60 seconds</option>
             </select>
           </label>
-          <button type="button" class="test-sound" id="testSound">TEST BEEP ↗</button>
+          <button type="button" class="test-sound" id="testSound">TEST BELL ↗</button>
         </div>
       </section>
 
-      <footer><span>TIP</span> Keep this tab open while you move. Sound uses your device volume.</footer>
+      <section class="settings" aria-label="Voice coach settings">
+        <div class="setting-heading">
+          <div>
+            <p class="section-number">03</p>
+            <h2>Voice coach</h2>
+          </div>
+          <label class="toggle-label" for="voiceEnabled">Enabled <input id="voiceEnabled" type="checkbox" checked /><span class="toggle" aria-hidden="true"></span></label>
+        </div>
+        <div class="sound-details" id="voiceDetails">
+          <div>
+            <p class="cue-title">MINUTE CALLS</p>
+            <p class="cue-copy" id="voiceCopy">Calls out each full minute, then counts down the last ten seconds.</p>
+          </div>
+          <button type="button" class="test-sound" id="testVoice">TEST VOICE ↗</button>
+        </div>
+      </section>
+
+      <section class="settings signal-settings" aria-label="Tempo music settings">
+        <div class="setting-heading">
+          <div>
+            <p class="section-number">04</p>
+            <h2>Tempo music</h2>
+          </div>
+          <p>Starts with the timer, pauses with it and fades out at the end.</p>
+        </div>
+        <div class="segmented" role="radiogroup" aria-label="Music source">
+          <label><input type="radio" name="music" value="off" /><span>Off</span></label>
+          <label><input type="radio" name="music" value="beat" checked /><span>Beat</span></label>
+          <label><input type="radio" name="music" value="file" /><span>My music</span></label>
+        </div>
+        <div class="music-details" id="musicDetails">
+          <div class="music-panel" id="beatPanel">
+            <label class="range-label" for="bpmInput">Tempo <output id="bpmValue">72</output> BPM</label>
+            <input id="bpmInput" type="range" min="50" max="120" step="2" value="72" />
+            <label class="interval-label" for="beatStyle">Style
+              <select id="beatStyle">
+                <option value="soft" selected>Soft pulse</option>
+                <option value="drums">Steady drums</option>
+              </select>
+            </label>
+          </div>
+          <div class="music-panel" id="filePanel" hidden>
+            <label class="file-button" for="musicFile">CHOOSE MUSIC</label>
+            <input id="musicFile" type="file" accept="audio/*" class="visually-hidden" />
+            <p class="cue-copy" id="musicFileName">No file chosen. It plays from your phone and stays on your phone.</p>
+          </div>
+          <div class="music-panel" id="volumePanel">
+            <label class="range-label" for="musicVolume">Volume <output id="volumeValue">60</output>%</label>
+            <input id="musicVolume" type="range" min="0" max="100" step="5" value="60" />
+            <button type="button" class="test-sound" id="previewMusic">PREVIEW ↗</button>
+          </div>
+        </div>
+      </section>
+
+      <footer><span>TIP</span> <span id="wakeStatus">The screen stays on while the timer runs. Sound uses your device volume.</span></footer>
     </main>
     <script src="script.js"></script>
   </body>
